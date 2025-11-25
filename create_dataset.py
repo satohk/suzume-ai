@@ -14,6 +14,7 @@ from tqdm import tqdm
 import json
 import pickle
 import argparse
+import glob
 
 
 def show_mask(mask, ax, obj_id=None, random_color=False):
@@ -103,7 +104,8 @@ def copy_frames(frame_images_dir:str, cache_dir:str, start_index:int, end_index:
         frame_name = f'{i:08d}.jpg'
         src_path = os.path.join(frame_images_dir, frame_name)
         dst_path = os.path.join(cache_dir, frame_name)
-        shutil.copyfile(src_path, dst_path)
+        if os.path.exists(src_path):
+            shutil.copyfile(src_path, dst_path)
     return True
 
 
@@ -323,31 +325,39 @@ def segment_frames(frames_dir, frame_names, detected_boxes, next_obj_id) -> dict
 
 def main():
     parser = argparse.ArgumentParser(description="Create dataset from video")
-    parser.add_argument("video_path", nargs="?", default="~/Downloads/suzume_sample.mp4", help="Path to input video")
+    parser.add_argument("video_dir", help="Path to input video")
     parser.add_argument("--results-dir", default="results", help="Directory to save results")
     parser.add_argument("--bulk-size", type=int, default=100, help="Number of frames to process in a batch")
     args = parser.parse_args()
 
-    video_path = args.video_path
+    video_dir = args.video_dir
     results_dir = args.results_dir 
     if not os.path.exists(results_dir):
         os.makedirs(results_dir)
 
     bulk_size = args.bulk_size
-    num_frames = read_video(video_path, "./frame_images")
     remove_frames_dir("./temp")
+    remove_frames_dir("./frame_images")
 
-    for start_frame in range(0, num_frames, bulk_size):
-        copy_frames("./frame_images", "./temp", start_frame, start_frame+bulk_size)
-        frames, frame_names = read_frames("./temp")
-        bird_boxes = detect_bird_boxes(frames)
-        object_segments, next_obj_id = segment_frames("./temp", frame_names, bird_boxes, start_frame*10)
-        remove_frames_dir("./temp")
+    for video_path in sorted(glob.glob(video_dir + "/*.mp4")):
+        print(f"process {video_path}")
+        num_frames = read_video(video_path, "./frame_images")
+        for start_frame in range(0, num_frames, bulk_size):
+            segments_file = f"{results_dir}/{os.path.basename(video_path)}_segments_{start_frame:08d}.pickle"
+            if os.path.exists(segments_file):
+                print(segments_file, "is already exists. skip.")
+                continue
 
-        # save results
-        segments_file = f"{results_dir}/{os.path.basename(video_path)}_segments_{start_frame:08d}.pickle"
-        with open(segments_file, 'wb') as f:
-            pickle.dump(object_segments, f)
+            copy_frames("./frame_images", "./temp", start_frame, start_frame+bulk_size)
+            frames, frame_names = read_frames("./temp")
+            bird_boxes = detect_bird_boxes(frames)
+            object_segments, next_obj_id = segment_frames("./temp", frame_names, bird_boxes, start_frame*10)
+            remove_frames_dir("./temp")
+
+            # save results
+            with open(segments_file, 'wb') as f:
+                pickle.dump(object_segments, f)
+        remove_frames_dir("./frame_images")
 
 
 if __name__ == "__main__":
