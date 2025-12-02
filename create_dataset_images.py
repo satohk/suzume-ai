@@ -53,6 +53,8 @@ def apply_mask_and_crop(frame_image: np.ndarray, mask: np.ndarray) -> np.ndarray
 
     # マスクの外接矩形に切り詰め
     ys, xs = np.where(mask_hw)
+    if len(ys) ==0:
+        return None
     y0, y1 = ys.min(), ys.max() + 1  # +1 は Python のスライス上限非含め
     x0, x1 = xs.min(), xs.max() + 1
     crop = result[y0:y1, x0:x1]
@@ -65,33 +67,42 @@ def main():
     parser.add_argument("video_dir", help="Path to input video")
     parser.add_argument("segmentation_results_dir", help="Directory to segmentation results pickle")
     parser.add_argument("images_dir", help="Directory to save results")
+    parser.add_argument("--start_group_id", default=0, type=int)
     args = parser.parse_args()
 
     video_dir = args.video_dir
     seg_dir = args.segmentation_results_dir
     res_img_dir_parent = args.images_dir
 
+    group_id = args.start_group_id
     for video_path in sorted(glob.glob(video_dir + "/*.mp4")):
         print(f"process {video_path}")
 
         # make res dir
         res_img_dir = f"{res_img_dir_parent}/{os.path.basename(video_path).split('.')[0]}"
+        if os.path.isdir(res_img_dir):
+            print(f"{res_img_dir} is already exist")
+            continue
         os.makedirs(res_img_dir, exist_ok=True)
 
         frames = read_video(video_path)
         for segments_file in sorted(glob.glob(f"{seg_dir}/{os.path.basename(video_path)}_segments*")):
             with open(segments_file, "rb") as f:
-                segments = pickle.load(f)
+                try:
+                    segments = pickle.load(f)
+                except:
+                    print(f"{segments_file} cannot read")
+                    continue
             for frame_id in segments:
                 frame_image = frames[int(frame_id)]
                 for obj_id in segments[frame_id]:
-                    print(obj_id)
                     mask_applyed_image = apply_mask_and_crop(frame_image, segments[frame_id][obj_id])
+                    if mask_applyed_image is None:
+                        continue
 
-                    res_img_name = f"id{obj_id:08}_frame{frame_id}.png"
+                    res_img_name = f"group{group_id:08}_label{obj_id:08}_frame{frame_id}.jpg"
                     cv2.imwrite(os.path.join(res_img_dir, res_img_name), mask_applyed_image)
-                    break
-                break
+            group_id += 1
 
 if __name__ == "__main__":
     main()
