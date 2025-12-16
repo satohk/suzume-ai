@@ -15,6 +15,7 @@ import json
 import pickle
 import argparse
 import glob
+import gc
 
 
 def read_video(video_path:str) -> list:
@@ -103,6 +104,9 @@ def main():
                     res_img_name = f"group{group_id:08}_label{obj_id:08}_frame{frame_id}.jpg"
                     cv2.imwrite(os.path.join(res_img_dir, res_img_name), mask_applyed_image)
             group_id += 1
+        def frames[:]
+        del frames
+        gc.collect()
 
 if __name__ == "__main__":
     main()
